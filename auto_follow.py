@@ -100,6 +100,52 @@ class AnimeEpisode:
     def set_torrent(self, torrent_url):
         self.torrent_url = torrent_url
 
+    def get_episode_name(self):
+        if self.tmdb and self.tmdb["episode"]:
+            return self.tmdb["episode"]["name"]
+        return ""
+
+    def downloading(self, client, gid):
+        """
+        下载完成后修改文件名
+
+        :param client: aria2c
+        :param gid: aria2 返回的gid
+        :return:
+        """
+        infoHash = client.tellStatus(gid=gid)["infoHash"]
+        new_gid = None
+        a = None
+        while new_gid is None:
+            for active in client.tellActive():
+                # infoHash相同判断为同一个下载（会先下载种子在下载文件）
+                # 文件大小大于 1Mb 判断为文件，否则当作种子
+                if active["infoHash"] == infoHash and int(active["totalLength"]) > (1024 * 1000):
+                    new_gid = active["gid"]
+            if new_gid is None:
+                time.sleep(5)
+            # if ac is None:
+            #     logger.info(self.name+" - S"+parse_num(self.season)+"E"+parse_num(self.episode)+"下载已停止")
+
+        while not (new_gid is None) and a is None:
+            status = client.tellStatus(gid=new_gid)
+            if status["status"] == "active" and status["seeder"] == "false":
+                logger.info(self.name + "-S" + parse_num(self.season) + "E" + parse_num(self.episode) + " 下载进度： " + str(
+                    100 * int(status["completedLength"]) / int(status["totalLength"])) + "%")
+                time.sleep(10)
+            else:
+                logger.info("下载完成：" + status["files"][0]["path"])
+                a = status
+
+        file_path = a["files"][0]["path"]
+        new_path = file_path.replace(file_path.split("/")[-1].split(".")[0],
+                                     "%(name)s - S%(season)sE%(episode)s%(e_name)s" % {"name": self.name,
+                                                                                       "season": parse_num(self.season),
+                                                                                       "episode": parse_num(
+                                                                                           self.episode),
+                                                                                       "e_name": " - " + self.get_episode_name()})
+        os.rename(file_path,new_path)
+
 
 def parse_num(num: int):
     """
@@ -253,7 +299,7 @@ def download(anime):
             res = client.addUri(uris=uris, options=option)
             logger.info("开始下载" + option['out'])
             logger.info("下载ID为：" + res)
-            return res
+            anime.downloading(client, res)
         else:
             logger.info("未找到" + option['out'])
     except ConnectionError:
