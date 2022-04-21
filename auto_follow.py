@@ -3,10 +3,11 @@ import os
 import re
 import time
 
-import requests
-from tmdbv3api import TMDb, TV, Season, Episode
-import pymysql
 import aria2rpc
+import pymysql
+import requests
+from loguru import logger
+from tmdbv3api import TMDb, TV, Season, Episode
 
 # TheMovieDB开发者ID
 TheMovieDBKey = '20ffbd1bc28eecd2425143d476472b22'
@@ -28,6 +29,9 @@ DB_BASE = "anime"
 ARIAID = "tippy"
 ARIAURL = "localhost"
 
+# 输出的日志文件路径
+LOG_FILE = "./logs.log"
+
 
 def get_follow_list():
     """
@@ -42,9 +46,9 @@ def get_follow_list():
         cursor.execute(sql)
         result = cursor.fetchall()
         follow_list = []
-        print("找到追番列表：")
+        logger.info("找到追番列表：")
         for r in result:
-            print("\t" + r[1])
+            logger.info("\t" + r[1])
             follow_list.append(AnimeEpisode(tm_id=r[0], name=r[1], season=r[5], language=r[6]))
         return follow_list
     except:
@@ -210,12 +214,12 @@ def get_bangumi_download_link(anime):
             if t["magnet"]:
                 # 磁力链
                 anime.set_magnet(t["magnet"])
-                print("\n\t找到第" + e_num + "集磁力链接")
+                logger.info("找到第" + e_num + "集磁力链接")
             anime.set_torrent(
                 "https://bangumi.moe/download/torrent/" + t["_id"] + "/" + t["title"].replace("/", "_") + ".torrent")
             break
     if anime.magent is None and anime.torrent_url is None:
-        print("未找到 " + anime.name + "S" + parse_num(anime.season) + "E" + e_num + " 的下载链接")
+        logger.info("未找到 " + anime.name + "S" + parse_num(anime.season) + "E" + e_num + " 的下载链接")
 
 
 def get_download_link(anime):
@@ -232,39 +236,52 @@ client = None
 
 
 def download(anime):
-    global client
-    if client is None:
-        client = aria2rpc.aria2_rpc_api(host=ARIAURL, secret=ARIAID)
-    option = {
-        "dir": anime.path,
-        "out": anime.name + " - S" + parse_num(anime.season) + "E" + parse_num(anime.episode)
-    }
-    uris = []
-    if anime.magent:
-        uris.append(anime.magent)
-    else:
-        uris.append(anime.torrent_url)
-    if len(uris) > 0:
-        res = client.addUri(uris=uris, options=option)
-        print("\t开始下载" + option['out'] + "\n\t下载ID为：" + res)
-        return res
-    else:
-        print("\t未找到" + option['out'])
-
-
-if __name__ == '__main__':
     try:
+        global client
+        if client is None:
+            client = aria2rpc.aria2_rpc_api(host=ARIAURL, secret=ARIAID)
+        option = {
+            "dir": anime.path,
+            "out": anime.name + " - S" + parse_num(anime.season) + "E" + parse_num(anime.episode)
+        }
+        uris = []
+        if anime.magent:
+            uris.append(anime.magent)
+        else:
+            uris.append(anime.torrent_url)
+        if len(uris) > 0:
+            res = client.addUri(uris=uris, options=option)
+            logger.info("开始下载" + option['out'])
+            logger.info("下载ID为：" + res)
+            return res
+        else:
+            logger.info("未找到" + option['out'])
+    except ConnectionError:
+        logger.debug("网络异常，可能是未启动aria2")
+
+
+def main():
+    try:
+        logger.add(LOG_FILE)
         follow_list = get_follow_list()
         for anime in follow_list:
-            print("开始查找" + anime.name)
+            logger.info("开始查找" + anime.name)
             prepare_list = get_tmdb_data(anime)
             if len(prepare_list) < 1:
-                print(anime.name + "查找完成，没有未下载剧集")
+                logger.info(anime.name + "查找完成，没有未下载剧集")
             for p_anime in prepare_list:
                 get_download_link(p_anime)
                 if p_anime.magent:
                     download(p_anime)
     except KeyboardInterrupt:
-        print("程序已停止")
+        logger.info("程序已停止")
+    except ConnectionError:
+        logger.debug("网络异常，5秒后重试")
+        time.sleep(5)
+        main()
     except BaseException as e:
-        print(e)
+        logger.debug(e)
+
+
+if __name__ == '__main__':
+    main()
