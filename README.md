@@ -36,7 +36,7 @@
     安装教程自己百度，需要打开RPC功能，代码中的`ARIAID`是`rpc-secret`(aria2.conf) 的值
 
    一个可视化面板[AriaNg](https://github.com/mayswind/AriaNg)
-3. 追番最好先创建好文件夹，不然可能会报错，以后有空再改
+3. ~~追番最好先创建好文件夹，不然可能会报错，以后有空再改~~
    ![LQzn8T](https://cdn.jsdelivr.net/gh/tippye/PicCloud@master/uPic/2022/04/20/LQzn8T.png)
 4. 安装必要的库
    ```shell
@@ -46,18 +46,19 @@
    在`auto_follow.py`中
    
    修改里面的`TheMovieDBKey`(TMDB官网申请)，`LOCAL_PATH`，`DB_xxx`，`ARIAxx`
-6. 运行试试
+6. `THREAD_NUM`是多线程的最大线程数，根据自己情况可以修改，默认是5
+7. 运行试试
 
    接着4. 使用虚拟环境
    ```shell
    python3 ./auto_follow.py
    ```
-7. 设置定时任务每天自动执行
+8. 设置定时任务每天自动执行
    
    macOS可以用`crontab`
    
    Windows有计划任务
-8. jellyfin或kodi之类的会自动识别更改
+9. jellyfin或kodi之类的会自动识别更改
 
 # `bangumi_tag`查找方法
 1. 打开[萌番组](https://bangumi.moe/search/index)

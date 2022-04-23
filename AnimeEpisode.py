@@ -1,3 +1,4 @@
+import http.client
 from time import sleep
 
 import requests
@@ -9,7 +10,7 @@ from utils import parse_num
 
 class AnimeEpisode:
     def __init__(self, name: str, season=1, episode=0, path: str = None, tm_id: str = None, language: str = "zh",
-                 torrent_url: str = None, magent: str = None, tmdb: object = None, bangumi_tag: str = None):
+                 torrent_url: str = None, magnet: str = None, tmdb: object = None, bangumi_tag: str = None):
         """
         剧集
 
@@ -20,7 +21,7 @@ class AnimeEpisode:
         :param tm_id: TheMovieDB ID
         :param language: 语言
         :param torrent_url: 种子文件链接
-        :param magent: 磁力链接
+        :param magnet: 磁力链接
         :param tmdb: TheMovieDB数据
         :param bangumi_tag: 萌番组搜索时优先使用此tag，没有则用name搜索取首位
         """
@@ -31,7 +32,7 @@ class AnimeEpisode:
         self.tm_id = tm_id
         self.language = language
         self.torrent_url = torrent_url
-        self.magent = magent
+        self.magnet = magnet
         self.tmdb = tmdb
         self.bangumi_tag = bangumi_tag
 
@@ -47,7 +48,7 @@ class AnimeEpisode:
         self.tmdb["episode"] = data
 
     def set_magnet(self, magnet):
-        self.magent = magnet
+        self.magnet = magnet
 
     def set_torrent(self, torrent_url):
         self.torrent_url = torrent_url
@@ -82,15 +83,19 @@ class AnimeEpisode:
                 sleep(5)
 
         while not (new_gid is None) and a is None:
-            # TODO: 下载视频文件时暂停
-            status = client.tellStatus(gid=new_gid)
-            if status["status"] == "active" and status["seeder"] == "false":
-                logger.info(self.name + "-S" + parse_num(self.season) + "E" + parse_num(self.episode) + " 下载进度： " + str(
-                    100 * int(status["completedLength"]) / int(status["totalLength"])) + "%")
+            try:
+                # TODO: 下载视频文件时暂停
+                status = client.tellStatus(gid=new_gid)
+                if status["status"] == "active" and status["seeder"] == "false":
+                    logger.info(
+                        self.name + "-S" + parse_num(self.season) + "E" + parse_num(self.episode) + " 下载进度： " + str(
+                            100 * int(status["completedLength"]) / int(status["totalLength"])) + "%")
+                    sleep(10)
+                else:
+                    logger.info("下载完成：" + status["files"][0]["path"])
+                    a = status
+            except http.client.CannotSendRequest or http.client.ResponseNotReady:
                 sleep(10)
-            else:
-                logger.info("下载完成：" + status["files"][0]["path"])
-                a = status
 
         if a == "null":
             logger.info("%(name)s-S%(season)sE%(episode)s%(e_name)s 下载已停止" % {"name": self.name,

@@ -1,7 +1,9 @@
 import json
 import os
 import re
+import threading
 import time
+from random import random
 
 import aria2rpc
 import pymysql
@@ -34,6 +36,9 @@ ARIAURL = "localhost"
 
 # 输出的日志文件路径
 LOG_FILE = "./logs.log"
+
+# 线程数量
+THREAD_NUM = 5
 
 
 def get_follow_list():
@@ -146,6 +151,27 @@ def get_bangumi_search_tags(anime):
     return tags
 
 
+def bangumi_search(tag_id, episode: int, page: int = 1):
+    result = {"magnet": None, "torrent": None}
+    data = json.dumps({
+        "tag_id": tag_id,
+        "p": page
+    })
+    time.sleep(1)
+    res = json.loads(requests.post(bangumiSearch, data=data).content)
+    for t in res["torrents"]:
+        if re.search("([\[【第])" + parse_num(episode) + "([]】话])", t["title"]):
+            if t["magnet"]:
+                # 磁力链
+                result["magnet"] = t["magnet"]
+            result["torrent"] = "https://bangumi.moe/download/torrent/" + t["_id"] + "/" + t["title"].replace("/",
+                                                                                                              "_") + ".torrent"
+
+    if result["torrent"] is None and page < res["page_count"]:
+        return bangumi_search(tag_id, episode, page + 1)
+    return result
+
+
 def get_bangumi_download_link(anime):
     """
     获取萌番组下载链接
@@ -155,29 +181,18 @@ def get_bangumi_download_link(anime):
     """
     search_tags = get_bangumi_search_tags(anime)
     if len(search_tags) < 1:
-        logger.info("Bangumi未搜索到" + anime.name)
+        logger.info("Bangumi未搜索到" + anime.name + "标签")
         return
-    data = json.dumps({
-        "tag_id": search_tags
-    })
-    time.sleep(1)
-    res = json.loads(requests.post(bangumiSearch, data=data).content)
-    # TODO:多页搜索
-    e_num = parse_num(anime.episode)
-    if len(res) < 1:
-        logger.info("Bangumi未搜索到" + anime.name)
+    res = bangumi_search(tag_id=search_tags, episode=anime.episode)
+    if res["torrent"] is None:
+        logger.info("Bangumi未搜索到{}-S{}E{}".format(anime.name, parse_num(anime.season), parse_num(anime.episode)))
         return
-    for t in res["torrents"]:
-        if re.search("([\[【第])" + e_num + "([]】话])", t["title"]):
-            if t["magnet"]:
-                # 磁力链
-                anime.set_magnet(t["magnet"])
-                logger.info("找到第" + e_num + "集磁力链接")
-            anime.set_torrent(
-                "https://bangumi.moe/download/torrent/" + t["_id"] + "/" + t["title"].replace("/", "_") + ".torrent")
-            break
-    if anime.magent is None and anime.torrent_url is None:
-        logger.info("未找到 " + anime.name + "S" + parse_num(anime.season) + "E" + e_num + " 的下载链接")
+    if res["magnet"] is not None:
+        # 磁力链
+        anime.set_magnet(res["magnet"])
+        logger.info("找到{}-S{}E{}磁力链接".format(anime.name, parse_num(anime.season), parse_num(anime.episode)))
+    # 种子文件链接
+    anime.set_torrent(res["torrent"])
 
 
 def get_download_link(anime):
@@ -193,7 +208,9 @@ def get_download_link(anime):
 client = None
 
 
-def download(anime):
+def download(anime, semaphore):
+    # 线程加锁
+    semaphore.acquire()
     try:
         global client
         if client is None:
@@ -203,11 +220,12 @@ def download(anime):
             "out": anime.name + " - S" + parse_num(anime.season) + "E" + parse_num(anime.episode)
         }
         uris = []
-        if anime.magent:
-            uris.append(anime.magent)
+        if anime.magnet:
+            uris.append(anime.magnet)
         else:
             uris.append(anime.torrent_url)
         if len(uris) > 0:
+            time.sleep(int(random()*10))
             res = client.addUri(uris=uris, options=option)
             logger.info("开始下载" + option['out'])
             logger.info("下载ID为：" + res)
@@ -216,11 +234,15 @@ def download(anime):
             logger.info("未找到" + option['out'])
     except ConnectionError:
         logger.debug("网络异常，可能是未启动aria2")
+    finally:
+        # 释放线程
+        semaphore.release()
 
 
 def main():
     try:
         logger.add(LOG_FILE)
+        semaphore = threading.BoundedSemaphore(THREAD_NUM)
         follow_list = get_follow_list()
         for anime in follow_list:
             logger.info("开始查找" + anime.name)
@@ -229,8 +251,10 @@ def main():
                 logger.info(anime.name + "查找完成，没有未下载剧集")
             for p_anime in prepare_list:
                 get_download_link(p_anime)
-                if p_anime.magent:
-                    download(p_anime)
+                if p_anime.magnet:
+                    t = threading.Thread(target=download, args=(p_anime, semaphore))
+                    t.start()
+                    # download(p_anime)
     except KeyboardInterrupt:
         logger.info("程序已停止")
     except ConnectionError:
