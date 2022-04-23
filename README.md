@@ -43,7 +43,7 @@
    source ./venv/bin/activate && pip3 install -r ./requirements.txt
    ```
 5. 修改部分配置
-   在`auto_follow.py`中
+   在`config.py`中
    
    修改里面的`TheMovieDBKey`(TMDB官网申请)，`LOCAL_PATH`，`DB_xxx`，`ARIAxx`
 6. `THREAD_NUM`是多线程的最大线程数，根据自己情况可以修改，默认是5
