@@ -9,6 +9,9 @@ import requests
 from loguru import logger
 from tmdbv3api import TMDb, TV, Season, Episode
 
+from AnimeEpisode import AnimeEpisode
+from utils import parse_num, parse_bangumi_tag
+
 # TheMovieDB开发者ID
 TheMovieDBKey = '20ffbd1bc28eecd2425143d476472b22'
 
@@ -49,7 +52,7 @@ def get_follow_list():
         logger.info("找到追番列表：")
         for r in result:
             logger.info("\t" + r[1])
-            follow_list.append(AnimeEpisode(tm_id=r[0], name=r[1], season=r[5], language=r[6]))
+            follow_list.append(AnimeEpisode(tm_id=r[0], name=r[1], bangumi_tag=r[4], season=r[5], language=r[6]))
         return follow_list
     except:
         return []
@@ -57,111 +60,10 @@ def get_follow_list():
         db.close()
 
 
-class AnimeEpisode:
-    def __init__(self, name: str, season=1, episode=0, path: str = None, tm_id: str = None, language: str = "zh",
-                 torrent_url: str = None, magent: str = None, tmdb: object = None):
-        """
-        剧集
-
-        :param name: 动漫名称
-        :param season: 季度
-        :param episode: 集数
-        :param path: 本地存储路径
-        :param tm_id: TheMovieDB ID
-        :param language: 语言
-        :param torrent_url: 种子文件链接
-        :param magent: 磁力链接
-        :param tmdb: TheMovieDB数据
-        """
-        self.name = name
-        self.season = season
-        self.episode = episode
-        self.path = path
-        self.tm_id = tm_id
-        self.language = language
-        self.torrent_url = torrent_url
-        self.magent = magent
-        self.tmdb = tmdb
-
-    def set_anime_data(self, data):
-        if self.tmdb is None:
-            self.tmdb = {"tv": None}
-        self.tmdb["tv"] = data
-
-    def set_season_data(self, data):
-        self.tmdb["season"] = data
-
-    def set_episode_data(self, data):
-        self.tmdb["episode"] = data
-
-    def set_magnet(self, magnet):
-        self.magent = magnet
-
-    def set_torrent(self, torrent_url):
-        self.torrent_url = torrent_url
-
-    def get_episode_name(self):
-        if self.tmdb and self.tmdb["episode"]:
-            return self.tmdb["episode"]["name"]
-        return ""
-
-    def downloading(self, client, gid):
-        """
-        下载完成后修改文件名
-
-        :param client: aria2c
-        :param gid: aria2 返回的gid
-        :return:
-        """
-        infoHash = client.tellStatus(gid=gid)["infoHash"]
-        new_gid = None
-        a = None
-        while new_gid is None:
-            for active in client.tellActive():
-                # infoHash相同判断为同一个下载（会先下载种子在下载文件）
-                # 文件大小大于 1Mb 判断为文件，否则当作种子
-                if active["infoHash"] == infoHash and int(active["totalLength"]) > (1024 * 1000):
-                    new_gid = active["gid"]
-            if new_gid is None:
-                time.sleep(5)
-            # if ac is None:
-            #     logger.info(self.name+" - S"+parse_num(self.season)+"E"+parse_num(self.episode)+"下载已停止")
-
-        while not (new_gid is None) and a is None:
-            status = client.tellStatus(gid=new_gid)
-            if status["status"] == "active" and status["seeder"] == "false":
-                logger.info(self.name + "-S" + parse_num(self.season) + "E" + parse_num(self.episode) + " 下载进度： " + str(
-                    100 * int(status["completedLength"]) / int(status["totalLength"])) + "%")
-                time.sleep(10)
-            else:
-                logger.info("下载完成：" + status["files"][0]["path"])
-                a = status
-
-        file_path = a["files"][0]["path"]
-        new_path = file_path.replace(file_path.split("/")[-1].split(".")[0],
-                                     "%(name)s - S%(season)sE%(episode)s%(e_name)s" % {"name": self.name,
-                                                                                       "season": parse_num(self.season),
-                                                                                       "episode": parse_num(
-                                                                                           self.episode),
-                                                                                       "e_name": " - " + self.get_episode_name()})
-        os.rename(file_path,new_path)
-
-
-def parse_num(num: int):
-    """
-    数字转为字符串，个位数补0
-
-    :param num:
-    :return:
-    """
-    if -1 < num < 10:
-        return "0" + str(num)
-    return str(num)
-
-
 def get_local_episodes(anime: AnimeEpisode):
     """
     获取本地已存储的剧集列表
+    如果没有本地文件夹会在LOCAL_PATH第一个目录下创建
 
     :param anime: 要查找的动漫对象
     :return List{int}:
@@ -170,19 +72,25 @@ def get_local_episodes(anime: AnimeEpisode):
     for path in LOCAL_PATH:
         try:
             for anime_name in os.listdir(path):
-                if re.search("^" + anime.name + "\ ?\(\d{4}\)", anime_name):
+                if re.search("^" + anime.name + " ?(\(\d{4}\))?", anime_name):
                     anime.path = path + '/' + anime_name + "/Season " + str(anime.season)
-                    try:
-                        season_dir = os.listdir(anime.path)
-                        for e_file in season_dir:
-                            temp = re.findall("S0?" + str(anime.season) + "E(\d+).*?\.(mp4|mkv|mov|m4v|flv)$", e_file)
-                            if len(temp) > 0:
-                                local_anime.append(int(temp[0][0]))
-                    except FileNotFoundError:
-                        pass
+                    if not os.path.isdir(anime.path):
+                        os.mkdir(anime.path)
+                    season_dir = os.listdir(anime.path)
+                    for e_file in season_dir:
+                        temp = re.findall("S0?" + str(anime.season) + "E(\d+).*?\.(mp4|mkv)$", e_file)
+                        if len(temp) > 0:
+                            local_anime.append(int(temp[0][0]))
                     break
-        except FileNotFoundError:
-            pass
+
+        except FileNotFoundError as fe:
+            print(fe)
+    # 本地还没有动漫文件夹
+    if anime.path is None:
+        os.mkdir("{}/{}".format(LOCAL_PATH[0], anime.name))
+        return get_local_episodes(anime)
+        # anime.path = "{}/Season {}".format(anime.path, anime.season)
+        # os.mkdir(anime.path)
     return local_anime
 
 
@@ -193,8 +101,6 @@ def get_tmdb_data(anime: AnimeEpisode):
     :param anime: 动漫对象
     :return: 所有已经发布但未下载但剧集对象
     """
-    if anime is None:
-        return None
     prepare_list = []
     local_episodes = get_local_episodes(anime)
     tmdb = TMDb()
@@ -207,16 +113,11 @@ def get_tmdb_data(anime: AnimeEpisode):
                 int(e['episode_number']) not in local_episodes:
             e = AnimeEpisode(anime.name, anime.season, int(e["episode_number"]), anime.path, anime.tm_id,
                              anime.language,
-                             None, None, anime.tmdb)
+                             None, None, anime.tmdb,anime.bangumi_tag)
             e.set_episode_data(Episode().details(e.tm_id, e.season, e.episode))
             prepare_list.append(e)
 
     return prepare_list
-
-
-def parse_bangumi_tag(tag):
-    if tag == "zh" or tag == "简体中文":
-        return '548ee0ea4ab7379536f56354'
 
 
 def get_bangumi_search_tags(anime):
@@ -226,16 +127,21 @@ def get_bangumi_search_tags(anime):
     :return:
     """
     tags = []
-    data = json.dumps({
-        "name": anime.name,
-        "keyword": True,
-        "multi": True
-    })
-    res = requests.post(bangumiTagSearch, data=data)
-    res = json.loads(res.content)
-    if res['success'] and res["found"]:
-        tags.append(res['tag'][0]['_id'])
-    tags.append(parse_bangumi_tag(anime.language))
+    if anime.bangumi_tag:
+        tags.append(anime.bangumi_tag)
+        tags.append(parse_bangumi_tag(anime.language))
+    else:
+        data = json.dumps({
+            "name": anime.name,
+            "keyword": True,
+            "multi": True
+        })
+        res = requests.post(bangumiTagSearch, data=data)
+        res = json.loads(res.content)
+        if res['success'] and res["found"]:
+            tags.append(res['tag'][0]['_id'])
+            tags.append(parse_bangumi_tag(anime.language))
+
     # TODO: 字幕组标签
     return tags
 
@@ -248,6 +154,9 @@ def get_bangumi_download_link(anime):
     :return:
     """
     search_tags = get_bangumi_search_tags(anime)
+    if len(search_tags) < 1:
+        logger.info("Bangumi未搜索到" + anime.name)
+        return
     data = json.dumps({
         "tag_id": search_tags
     })
@@ -255,8 +164,11 @@ def get_bangumi_download_link(anime):
     res = json.loads(requests.post(bangumiSearch, data=data).content)
     # TODO:多页搜索
     e_num = parse_num(anime.episode)
+    if len(res) < 1:
+        logger.info("Bangumi未搜索到" + anime.name)
+        return
     for t in res["torrents"]:
-        if re.search("(\[|\【|第)" + e_num + "(\]|\】|话)", t["title"]):
+        if re.search("([\[【第])" + e_num + "([]】话])", t["title"]):
             if t["magnet"]:
                 # 磁力链
                 anime.set_magnet(t["magnet"])
@@ -325,8 +237,6 @@ def main():
         logger.debug("网络异常，5秒后重试")
         time.sleep(5)
         main()
-    except BaseException as e:
-        logger.debug(e)
 
 
 if __name__ == '__main__':

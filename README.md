@@ -2,10 +2,9 @@
 自动追番，下载视频
 
 # 注意⚠️
-1. 本地媒体需要使用刮削器（如tinyMediaManager）刮削后使用
-2. 种子资源来自于[萌番组](https://bangumi.moe), 更新及不及时就开字幕组的大佬们了
-3. 判断更新的逻辑使用[TheMovieDB](https://www.themoviedb.org)的数据，和tinyMediaManager一致
-4. 新下载的视频会在对应季度的文件夹里
+1. 种子资源来自于[萌番组](https://bangumi.moe), 更新及不及时就看字幕组的大佬们了
+2. 判断更新的逻辑使用[TheMovieDB](https://www.themoviedb.org)的数据，和tinyMediaManager一致
+3. 新下载的视频会在对应季度的文件夹里
    
    比如我下载 派对浪客诸葛孔明第一季第二季，他就会放到`anime/派对浪客诸葛孔明 (2022)/Season 1`下面，但是还不会改名，只能沿用种子名，刮削器也能直接识别出来
 
@@ -19,18 +18,20 @@
         name          varchar(255)                                   null,
         create_time   timestamp   default CURRENT_TIMESTAMP          null,
         update_time   timestamp   default CURRENT_TIMESTAMP          null,
-        local_episode int         default 0                          null,
+        bangumi_tag   varchar(255)                                   null,
         season        int         default 1                          null,
         language      varchar(30) default 'zh' null
     );
    ```
-   `tmId`在tinyMediaManager中能找到，或者去[TheMovieDB](https://www.themoviedb.org)找（在url最后面的数字部分）
+   - `tmId`在tinyMediaManager中能找到，或者去[TheMovieDB](https://www.themoviedb.org)找（在url最后面的数字部分）
 
-   `name`使用tmdb的名字，本地文件夹命名需要是`名字 (2022)`
+   - `name`使用tmdb的名字，本地文件夹命名需要是`名字 (2022)`
 
-   `create_time`,`update_time`,`local_episode`没啥用，但是懒得改代码了
+   - `create_time`,`update_time`没啥用
 
-   `language`只适配了`zh`，我觉得我这辈子应该不会去优先繁体字幕
+   - `bangumi_tag`是萌番组搜索的tag值，比如约会大作战直接搜名字会搜不到，搜到的第一个还是第三季，所以填写这个可以搜索的更准确，查找方法放到下面
+
+   - `language`只适配了`zh`，我觉得我这辈子应该不会去优先繁体字幕
 2. 安装aria2
     安装教程自己百度，需要打开RPC功能，代码中的`ARIAID`是`rpc-secret`(aria2.conf) 的值
 
@@ -57,3 +58,11 @@
    
    Windows有计划任务
 8. jellyfin或kodi之类的会自动识别更改
+
+# `bangumi_tag`查找方法
+1. 打开[萌番组](https://bangumi.moe/search/index)
+2. 打开控制台（右键检查），并切换到网络
+3. 搜索框搜索想看的番剧名，在搜到的标签中点击目标标签
+4. 在控制台中找到最后一个`search`并点击预览请求数据
+5. `tag_id`中的值就是目标tag
+   ![VEp2cl](https://cdn.jsdelivr.net/gh/tippye/PicCloud@master/uPic/2022/04/23/VEp2cl.png)
