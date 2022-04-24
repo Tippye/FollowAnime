@@ -11,7 +11,8 @@ from utils import parse_num
 
 class AnimeEpisode:
     def __init__(self, name: str, season=1, episode=0, path: str = None, tm_id: str = None, language: str = "zh",
-                 torrent_url: str = None, magnet: str = None, tmdb: object = None, bangumi_tag: str = None):
+                 torrent_url: str = None, magnet: str = None, tmdb: object = None, bangumi_tag: str = None,
+                 team: str = None):
         """
         剧集
 
@@ -25,6 +26,7 @@ class AnimeEpisode:
         :param magnet: 磁力链接
         :param tmdb: TheMovieDB数据
         :param bangumi_tag: 萌番组搜索时优先使用此tag，没有则用name搜索取首位
+        :param team: 字幕组tag
         """
         self.name = name
         self.season = season
@@ -36,7 +38,8 @@ class AnimeEpisode:
         self.magnet = magnet
         self.tmdb = tmdb
         self.bangumi_tag = bangumi_tag
-        self.format_name = None
+        self.team = team
+        self.format_name = "{} - S{}E{}".format(name, parse_num(season), parse_num(episode))
 
     def set_anime_data(self, data):
         if self.tmdb is None:

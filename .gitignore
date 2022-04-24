@@ -39,3 +39,4 @@ log/
 *.orig
 temp/
 
+config.py

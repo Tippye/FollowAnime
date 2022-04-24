@@ -17,7 +17,7 @@
             primary key,
         name          varchar(255)                                   null,
         create_time   timestamp   default CURRENT_TIMESTAMP          null,
-        update_time   timestamp   default CURRENT_TIMESTAMP          null,
+        team          varchar(255)                                   null,
         bangumi_tag   varchar(255)                                   null,
         season        int         default 1                          null,
         language      varchar(30) default 'zh' null
@@ -27,11 +27,15 @@
 
    - `name`使用tmdb的名字，本地文件夹命名需要是`名字 (2022)`
 
-   - `create_time`,`update_time`没啥用
+   - `create_time`没啥用
 
-   - `bangumi_tag`是萌番组搜索的tag值，比如约会大作战直接搜名字会搜不到，搜到的第一个还是第三季，所以填写这个可以搜索的更准确，查找方法放到下面
+   - `team`是字幕组的tag，可以在[team.json](https://github.com/Tippye/FollowAnime/blob/master/team.json)里找到，也可以用下面`bangumi_tag`的查找方法
+
+   - `bangumi_tag`是萌番组搜索的tag值，比如约会大作战直接搜名字会搜不到，搜到的第一个还是第三季，所以填写这个可以搜索的更准确，查找方法放到下面，不填写默认使用所有字幕组
 
    - `language`只适配了`zh`，我觉得我这辈子应该不会去优先繁体字幕
+
+   ![lavTa1](https://cdn.jsdelivr.net/gh/tippye/PicCloud@master/uPic/2022/04/24/lavTa1.png)
 2. 安装aria2
     安装教程自己百度，需要打开RPC功能，代码中的`ARIAID`是`rpc-secret`(aria2.conf) 的值
 

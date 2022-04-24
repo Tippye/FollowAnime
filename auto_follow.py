@@ -32,7 +32,8 @@ def get_follow_list():
         logger.info("找到追番列表：")
         for r in result:
             logger.info("\t" + r[1])
-            follow_list.append(AnimeEpisode(tm_id=r[0], name=r[1], bangumi_tag=r[4], season=r[5], language=r[6]))
+            follow_list.append(
+                AnimeEpisode(tm_id=r[0], name=r[1], team=r[3], bangumi_tag=r[4], season=r[5], language=r[6]))
         return follow_list
     except:
         return []
@@ -110,6 +111,8 @@ def get_bangumi_search_tags(anime):
     if anime.bangumi_tag:
         tags.append(anime.bangumi_tag)
         tags.append(parse_bangumi_tag(anime.language))
+        if anime.team:
+            tags.append(anime.team)
     else:
         data = json.dumps({
             "name": anime.name,
@@ -121,6 +124,8 @@ def get_bangumi_search_tags(anime):
         if res['success'] and res["found"]:
             tags.append(res['tag'][0]['_id'])
             tags.append(parse_bangumi_tag(anime.language))
+            if anime.team:
+                tags.append(anime.team)
 
     return tags
 
