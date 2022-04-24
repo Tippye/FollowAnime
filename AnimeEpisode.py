@@ -1,4 +1,5 @@
 import http.client
+import xmlrpc.client
 from time import sleep
 
 import requests
@@ -35,6 +36,7 @@ class AnimeEpisode:
         self.magnet = magnet
         self.tmdb = tmdb
         self.bangumi_tag = bangumi_tag
+        self.format_name = None
 
     def set_anime_data(self, data):
         if self.tmdb is None:
@@ -46,6 +48,8 @@ class AnimeEpisode:
 
     def set_episode_data(self, data):
         self.tmdb["episode"] = data
+        self.format_name = "{} - S{}E{} - {}".format(self.name, parse_num(self.season), parse_num(self.episode),
+                                                     data["name"])
 
     def set_magnet(self, magnet):
         self.magnet = magnet
@@ -84,23 +88,22 @@ class AnimeEpisode:
 
         while not (new_gid is None) and a is None:
             try:
-                # TODO: 下载视频文件时暂停
                 status = client.tellStatus(gid=new_gid)
-                if status["status"] == "active" and status["seeder"] == "false":
-                    logger.info(
-                        self.name + "-S" + parse_num(self.season) + "E" + parse_num(self.episode) + " 下载进度： " + str(
-                            100 * int(status["completedLength"]) / int(status["totalLength"])) + "%")
+                if status["status"] == "active":
+                    logger.info(self.format_name + " 下载进度： " + str(
+                        100 * int(status["completedLength"]) / int(status["totalLength"])) + "%")
                     sleep(10)
                 else:
-                    logger.info("下载完成：" + status["files"][0]["path"])
-                    a = status
+                    # 暂停时status=="paused"
+                    a = "null"
+            except xmlrpc.client.Fault:
+                # GID xxx is not found
+                a = "null"
             except http.client.CannotSendRequest or http.client.ResponseNotReady:
                 sleep(10)
 
         if a == "null":
-            logger.info("%(name)s-S%(season)sE%(episode)s%(e_name)s 下载已停止" % {"name": self.name,
-                                                                              "season": parse_num(self.season),
-                                                                              "episode": parse_num(self.episode),
-                                                                              "e_name": " - " + self.get_episode_name()})
+            logger.info("%s 下载已停止, 请手动启动下载任务，下载完成后请手动修改文件名" % self.format_name)
         else:
             scrape(self, a["files"][0]["path"])
+            logger.info("下载完成：" + a["files"][0]["path"])

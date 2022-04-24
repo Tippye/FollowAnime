@@ -166,6 +166,6 @@ def scrape(anime, file_path):
     """
     # jellyfin可以配置自动刮削nfo文件和thumb图片，只需要修改文件名即可
     # add_episode_nfo(anime, file_path)
-    anime.path = "{}/{} - S{}E{}{}.{}".format( anime.path, anime.name, parse_num(anime.season), parse_num(anime.episode), (" - " + anime.get_episode_name()),file_path.split(".")[-1])
+    anime.path = "{}/{}.{}".format(anime.path, anime.format_name, file_path.split(".")[-1])
     # new_path = file_path.replace(file_path.split("/")[-1].split(".")[0],anime.path)
     os.rename(file_path, anime.path)

@@ -12,8 +12,8 @@ from loguru import logger
 from tmdbv3api import TMDb, TV, Season, Episode
 
 from AnimeEpisode import AnimeEpisode
-from utils import parse_num, parse_bangumi_tag
 from config import *
+from utils import parse_num, parse_bangumi_tag
 
 
 def get_follow_list():
@@ -93,7 +93,7 @@ def get_tmdb_data(anime: AnimeEpisode):
                 int(e['episode_number']) not in local_episodes:
             e = AnimeEpisode(anime.name, anime.season, int(e["episode_number"]), anime.path, anime.tm_id,
                              anime.language,
-                             None, None, anime.tmdb,anime.bangumi_tag)
+                             None, None, anime.tmdb, anime.bangumi_tag)
             e.set_episode_data(Episode().details(e.tm_id, e.season, e.episode))
             prepare_list.append(e)
 
@@ -122,11 +122,19 @@ def get_bangumi_search_tags(anime):
             tags.append(res['tag'][0]['_id'])
             tags.append(parse_bangumi_tag(anime.language))
 
-    # TODO: 字幕组标签
     return tags
 
 
 def bangumi_search(tag_id, episode: int, page: int = 1):
+    """
+    从萌番组搜索目标种子
+    默认按种子数排序
+
+    :param tag_id:  搜索参数
+    :param episode: 查找集数
+    :param page:    多页搜索用的页数
+    :return:
+    """
     result = {"magnet": None, "torrent": None}
     data = json.dumps({
         "tag_id": tag_id,
@@ -134,13 +142,23 @@ def bangumi_search(tag_id, episode: int, page: int = 1):
     })
     time.sleep(1)
     res = json.loads(requests.post(bangumiSearch, data=data).content)
+    torrents = res["torrents"]
+
+    def get_seeders(o):
+        return o["seeders"]
+
+    torrents.sort(key=get_seeders, reverse=True)
     for t in res["torrents"]:
-        if re.search("([\[【第])" + parse_num(episode) + "([]】话])", t["title"]):
+        # if re.search("([\[【第])" + parse_num(episode) + "([]】话])", t["title"]):
+        if re.search("(\[{}\])|(【{}】)|(\({}\))|(第{}集)|(\[{}\ ?[Vv]2\])|(【{}\ ?[Vv]2】)|(\ {}\ )".replace("{}", parse_num(
+                episode)), t["title"]):
             if t["magnet"]:
                 # 磁力链
                 result["magnet"] = t["magnet"]
             result["torrent"] = "https://bangumi.moe/download/torrent/" + t["_id"] + "/" + t["title"].replace("/",
                                                                                                               "_") + ".torrent"
+        if result["torrent"] is not None:
+            break
 
     if result["torrent"] is None and page < res["page_count"]:
         return bangumi_search(tag_id, episode, page + 1)
@@ -160,12 +178,12 @@ def get_bangumi_download_link(anime):
         return
     res = bangumi_search(tag_id=search_tags, episode=anime.episode)
     if res["torrent"] is None:
-        logger.info("Bangumi未搜索到{}-S{}E{}".format(anime.name, parse_num(anime.season), parse_num(anime.episode)))
+        logger.info("Bangumi未搜索到{}".format(anime.format_name))
         return
     if res["magnet"] is not None:
         # 磁力链
         anime.set_magnet(res["magnet"])
-        logger.info("找到{}-S{}E{}磁力链接".format(anime.name, parse_num(anime.season), parse_num(anime.episode)))
+        logger.info("找到{}磁力链接".format(anime.name))
     # 种子文件链接
     anime.set_torrent(res["torrent"])
 
@@ -192,7 +210,7 @@ def download(anime, semaphore):
             client = aria2rpc.aria2_rpc_api(host=ARIAURL, secret=ARIAID)
         option = {
             "dir": anime.path,
-            "out": anime.name + " - S" + parse_num(anime.season) + "E" + parse_num(anime.episode)
+            "out": anime.format_name
         }
         uris = []
         if anime.magnet:
@@ -200,7 +218,7 @@ def download(anime, semaphore):
         else:
             uris.append(anime.torrent_url)
         if len(uris) > 0:
-            time.sleep(int(random()*10))
+            time.sleep(int(random() * 10))
             res = client.addUri(uris=uris, options=option)
             logger.info("开始下载" + option['out'])
             logger.info("下载ID为：" + res)
