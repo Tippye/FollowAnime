@@ -92,12 +92,17 @@ class AnimeEpisode:
         while not (new_gid is None) and a is None:
             try:
                 status = client.tellStatus(gid=new_gid)
-                if status["status"] == "active":
+                if status["status"] == "active" and status["seeder"] == "false":
                     logger.info(self.format_name + " 下载进度： " + str(
                         100 * int(status["completedLength"]) / int(status["totalLength"])) + "%")
                     sleep(10)
-                else:
+                elif status["status"] == "active" and status["seeder"]=="true":
+                    logger.info(self.format_name+"做种中...")
+                    a = status
+                elif status["status"] == "complete":
                     # 暂停时status=="paused"
+                    a = status
+                else:
                     a = "null"
             except xmlrpc.client.Fault:
                 # GID xxx is not found
