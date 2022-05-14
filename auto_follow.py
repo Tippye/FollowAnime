@@ -110,7 +110,8 @@ def get_bangumi_search_tags(anime):
     tags = []
     if anime.bangumi_tag:
         tags.append(anime.bangumi_tag)
-        tags.append(parse_bangumi_tag(anime.language))
+        if anime.language:
+            tags.append(parse_bangumi_tag(anime.language))
         if anime.team:
             tags.append(anime.team)
     else:
@@ -123,7 +124,8 @@ def get_bangumi_search_tags(anime):
         res = json.loads(res.content)
         if res['success'] and res["found"]:
             tags.append(res['tag'][0]['_id'])
-            tags.append(parse_bangumi_tag(anime.language))
+            if anime.language:
+                tags.append(parse_bangumi_tag(anime.language))
             if anime.team:
                 tags.append(anime.team)
 
@@ -165,8 +167,11 @@ def bangumi_search(tag_id, episode: int, page: int = 1):
         if result["torrent"] is not None:
             break
 
-    if result["torrent"] is None and page < res["page_count"]:
-        return bangumi_search(tag_id, episode, page + 1)
+    try:
+        if result["torrent"] is None and page < res["page_count"]:
+            return bangumi_search(tag_id, episode, page + 1)
+    except KeyError:
+        pass
     return result
 
 
