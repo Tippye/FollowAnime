@@ -1,4 +1,3 @@
-import json
 import os
 import re
 import threading
@@ -6,19 +5,13 @@ import time
 from random import random
 
 import aria2rpc
-import pymysql
-import requests
 from loguru import logger
 from tmdbv3api import TMDb, TV, Season, Episode
 
 from AnimeEpisode import AnimeEpisode
 from DBUtil import DBUtil
+from api import get_bangumi_search_tags, bangumi_search
 from config import *
-from utils import parse_num, parse_bangumi_tag
-
-request_head = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.4 Safari/605.1.15"
-}
 
 db_util = None
 
@@ -96,84 +89,11 @@ def get_tmdb_data(anime: AnimeEpisode):
             e.set_episode_data(Episode().details(e.tm_id, e.season, e.episode))
             prepare_list.append(e)
 
-    if len(prepare_list)<1 and anime.tmdb["season"]["episodes"][-1]["episode_number"] in local_episodes:
-        logger.info(anime.name+"已完结")
+    if len(prepare_list) < 1 and anime.tmdb["season"]["episodes"][-1]["episode_number"] in local_episodes:
+        logger.info(anime.name + "已完结")
         db_util.delete_follow(anime.tm_id)
 
     return prepare_list
-
-
-def get_bangumi_search_tags(anime):
-    """
-    获取萌番组搜索时用的tags
-    :param anime:
-    :return:
-    """
-    tags = []
-    if anime.bangumi_tag:
-        tags.append(anime.bangumi_tag)
-        if anime.language:
-            tags.append(parse_bangumi_tag(anime.language))
-        if anime.team:
-            tags.append(anime.team)
-    else:
-        data = json.dumps({
-            "name": anime.name,
-            "keyword": True,
-            "multi": True
-        })
-        res = requests.post(bangumiTagSearch, data=data, headers=request_head)
-        res = json.loads(res.content)
-        if res['success'] and res["found"]:
-            tags.append(res['tag'][0]['_id'])
-            if anime.language:
-                tags.append(parse_bangumi_tag(anime.language))
-            if anime.team:
-                tags.append(anime.team)
-
-    return tags
-
-
-def bangumi_search(tag_id, episode: int, page: int = 1):
-    """
-    从萌番组搜索目标种子
-    默认按种子数排序
-
-    :param tag_id:  搜索参数
-    :param episode: 查找集数
-    :param page:    多页搜索用的页数
-    :return:
-    """
-    result = {"magnet": None, "torrent": None}
-    data = json.dumps({
-        "tag_id": tag_id,
-        "p": page
-    })
-    time.sleep(1)
-    res = json.loads(requests.post(bangumiSearch, data=data, headers=request_head).content)
-    torrents = res["torrents"]
-
-    def get_seeders(o):
-        return o["seeders"]
-
-    torrents.sort(key=get_seeders, reverse=True)
-    for t in res["torrents"]:
-        if re.search("(\[{}\])|(【{}】)|(\({}\))|(第{}集)|(\[{}\ ?[Vv]2\])|(【{}\ ?[Vv]2】)|(\ {}\ )".replace("{}", parse_num(
-                episode)), t["title"]):
-            if t["magnet"]:
-                # 磁力链
-                result["magnet"] = t["magnet"]
-            result["torrent"] = "https://bangumi.moe/download/torrent/" + t["_id"] + "/" + t["title"].replace("/",
-                                                                                                              "_") + ".torrent"
-        if result["torrent"] is not None:
-            break
-
-    try:
-        if result["torrent"] is None and page < res["page_count"]:
-            return bangumi_search(tag_id, episode, page + 1)
-    except KeyError:
-        pass
-    return result
 
 
 def get_bangumi_download_link(anime):
@@ -184,14 +104,14 @@ def get_bangumi_download_link(anime):
     :return:
     """
     search_tags = get_bangumi_search_tags(anime)
-    if len(search_tags) < 1:
+    if not search_tags or len(search_tags) < 1:
         logger.info("Bangumi未搜索到" + anime.name + "标签")
         return
     res = bangumi_search(tag_id=search_tags, episode=anime.episode)
-    if res["torrent"] is None:
+    if not res or not res["torrent"]:
         logger.info("Bangumi未搜索到{}".format(anime.format_name))
         return
-    if res["magnet"] is not None:
+    if res["magnet"]:
         # 磁力链
         anime.set_magnet(res["magnet"])
         logger.info("找到{}磁力链接".format(anime.name))
