@@ -106,17 +106,18 @@ def get_bangumi_download_link(anime):
     search_tags = get_bangumi_search_tags(anime)
     if not search_tags or len(search_tags) < 1:
         logger.info("Bangumi未搜索到" + anime.name + "标签")
-        return
+        return False
     res = bangumi_search(tag_id=search_tags, episode=anime.episode)
     if not res or not res["torrent"]:
         logger.info("Bangumi未搜索到{}".format(anime.format_name))
-        return
+        return False
     if res["magnet"]:
         # 磁力链
         anime.set_magnet(res["magnet"])
         logger.info("找到{}磁力链接".format(anime.name))
     # 种子文件链接
     anime.set_torrent(res["torrent"])
+    return True
 
 
 def get_download_link(anime):
@@ -126,6 +127,7 @@ def get_download_link(anime):
     :param anime:
     :return:
     """
+    # 从萌番组爬取：https://bangumi.moe
     get_bangumi_download_link(anime)
 
 

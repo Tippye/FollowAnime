@@ -3,6 +3,7 @@ import re
 from time import sleep
 
 import requests
+from requests.exceptions import SSLError
 
 import AnimeEpisode
 from config import bangumiTagSearch, bangumiSearch
@@ -20,10 +21,12 @@ def _post(url, data):
     retry = _RETRY_NUM
     while retry > 0:
         try:
-            return requests.post(url=url, data=data, headers=request_head)
+            return requests.post(url=url, data=data, headers=request_head,verify=False)
         except ConnectionError:
             retry = retry - 1
             sleep(2)
+        except SSLError:
+            retry = -1
 
     return None
 
