@@ -12,8 +12,15 @@ from loguru import logger
 from tmdbv3api import TMDb, TV, Season, Episode
 
 from AnimeEpisode import AnimeEpisode
+from DBUtil import DBUtil
 from config import *
 from utils import parse_num, parse_bangumi_tag
+
+request_head = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.4 Safari/605.1.15"
+}
+
+db_util = None
 
 
 def get_follow_list():
@@ -22,23 +29,15 @@ def get_follow_list():
 
     :return:
     """
-    db = pymysql.connect(host=DB_ADDRESS, port=3306, user=DB_USER, password=DB_PASSWORD, database=DB_BASE)
-    cursor = db.cursor()
-    sql = "SELECT * FROM follow"
-    try:
-        cursor.execute(sql)
-        result = cursor.fetchall()
-        follow_list = []
-        logger.info("找到追番列表：")
-        for r in result:
-            logger.info("\t" + r[1])
-            follow_list.append(
-                AnimeEpisode(tm_id=r[0], name=r[1], team=r[3], bangumi_tag=r[4], season=r[5], language=r[6]))
-        return follow_list
-    except:
-        return []
-    finally:
-        db.close()
+    global db_util
+    result = db_util.get_follows()
+    follow_list = []
+    logger.info("找到追番列表：")
+    for r in result:
+        logger.info("\t" + r[1])
+        follow_list.append(
+            AnimeEpisode(tm_id=r[0], name=r[1], team=r[3], bangumi_tag=r[4], season=r[5], language=r[6]))
+    return follow_list
 
 
 def get_local_episodes(anime: AnimeEpisode):
@@ -70,8 +69,6 @@ def get_local_episodes(anime: AnimeEpisode):
     if anime.path is None:
         os.mkdir("{}/{}".format(LOCAL_PATH[0], anime.name))
         return get_local_episodes(anime)
-        # anime.path = "{}/Season {}".format(anime.path, anime.season)
-        # os.mkdir(anime.path)
     return local_anime
 
 
@@ -82,6 +79,7 @@ def get_tmdb_data(anime: AnimeEpisode):
     :param anime: 动漫对象
     :return: 所有已经发布但未下载但剧集对象
     """
+    global db_util
     prepare_list = []
     local_episodes = get_local_episodes(anime)
     tmdb = TMDb()
@@ -97,6 +95,10 @@ def get_tmdb_data(anime: AnimeEpisode):
                              None, None, anime.tmdb, anime.bangumi_tag)
             e.set_episode_data(Episode().details(e.tm_id, e.season, e.episode))
             prepare_list.append(e)
+
+    if len(prepare_list)<1 and anime.tmdb["season"]["episodes"][-1]["episode_number"] in local_episodes:
+        logger.info(anime.name+"已完结")
+        db_util.delete_follow(anime.tm_id)
 
     return prepare_list
 
@@ -120,7 +122,7 @@ def get_bangumi_search_tags(anime):
             "keyword": True,
             "multi": True
         })
-        res = requests.post(bangumiTagSearch, data=data)
+        res = requests.post(bangumiTagSearch, data=data, headers=request_head)
         res = json.loads(res.content)
         if res['success'] and res["found"]:
             tags.append(res['tag'][0]['_id'])
@@ -148,7 +150,7 @@ def bangumi_search(tag_id, episode: int, page: int = 1):
         "p": page
     })
     time.sleep(1)
-    res = json.loads(requests.post(bangumiSearch, data=data).content)
+    res = json.loads(requests.post(bangumiSearch, data=data, headers=request_head).content)
     torrents = res["torrents"]
 
     def get_seeders(o):
@@ -156,7 +158,6 @@ def bangumi_search(tag_id, episode: int, page: int = 1):
 
     torrents.sort(key=get_seeders, reverse=True)
     for t in res["torrents"]:
-        # if re.search("([\[【第])" + parse_num(episode) + "([]】话])", t["title"]):
         if re.search("(\[{}\])|(【{}】)|(\({}\))|(第{}集)|(\[{}\ ?[Vv]2\])|(【{}\ ?[Vv]2】)|(\ {}\ )".replace("{}", parse_num(
                 episode)), t["title"]):
             if t["magnet"]:
@@ -243,7 +244,9 @@ def download(anime, semaphore):
 
 
 def main():
+    global db_util
     try:
+        db_util = DBUtil()
         logger.add(LOG_FILE)
         semaphore = threading.BoundedSemaphore(THREAD_NUM)
         follow_list = get_follow_list()
@@ -257,13 +260,14 @@ def main():
                 if p_anime.magnet:
                     t = threading.Thread(target=download, args=(p_anime, semaphore))
                     t.start()
-                    # download(p_anime)
     except KeyboardInterrupt:
         logger.info("程序已停止")
     except ConnectionError:
         logger.debug("网络异常，5秒后重试")
         time.sleep(5)
         main()
+    finally:
+        db_util.close()
 
 
 if __name__ == '__main__':
